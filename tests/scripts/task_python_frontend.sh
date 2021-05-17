@@ -18,6 +18,7 @@
 
 set -e
 set -u
+set -x
 
 source tests/scripts/setup-pytest-env.sh
 # to avoid openblas threading error
@@ -25,6 +26,8 @@ export TVM_BIND_THREADS=0
 export OMP_NUM_THREADS=1
 
 export TVM_TEST_TARGETS="llvm;cuda"
+
+nvidia-smi
 
 find . -type f -path "*.pyc" | xargs rm -f
 
