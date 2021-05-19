@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <vector>
+#include <string>
 #include <utility>
 #include "c_runtime_api.h"
 #include "serializer.h"
@@ -20,6 +21,7 @@ namespace runtime {
  */
 class NDArray {
  public:
+  std::string name_hint;
   // internal container type
   class Container;
   /*! \brief default constructor */

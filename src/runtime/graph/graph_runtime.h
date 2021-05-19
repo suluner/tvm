@@ -85,11 +85,26 @@ class GraphRuntime : public ModuleNode {
   int GetInputIndex(const std::string& name);
 
   /*!
+   * \brief Get the graph input index given the name of input.
+   * \param name The name of the input.
+   * \return The index of graph input.
+   */
+  int GetGraphInputIndex(const std::string& name);
+
+  /*!
    * \brief set index-th input to the graph.
    * \param index The input index.
    * \param data_in The input data.
    */
   void SetInput(int index, DLTensor* data_in);
+
+  /*!
+   * \brief Get the number of inputs
+   *
+   * \return The number of inputs from graph.
+   */
+  int NumInputs() const;
+
   /*!
    * \brief Get the number of outputs
    *
@@ -103,6 +118,15 @@ class GraphRuntime : public ModuleNode {
    * \return NDArray corresponding to given input node index.
    */
   NDArray GetInput(int index) const;
+
+  /*!
+    * \brief Return NDArray for given graph input index.
+    * \param index The graph input index.
+    *
+    * \return NDArray corresponding to given graph input node index.
+    */
+   NDArray GetGraphInput(int index) const;
+
   /*!
    * \brief Return NDArray for given output index.
    * \param index The output index.
@@ -110,6 +134,16 @@ class GraphRuntime : public ModuleNode {
    * \return NDArray corresponding to given output node index.
    */
   NDArray GetOutput(int index) const;
+
+  /*!
+   * \brief Return name_hint of NDArray for given input/output index.
+   * \param type 0 - input 1 - output.
+   * \param index index of input/output.
+   *
+   * \return string of name_hint
+   */
+  std::string GetNameHint(int type, int index) const;
+
   /*!
    * \brief Copy index-th output to data_out.
    * \param index The output index.
@@ -352,6 +386,8 @@ class GraphRuntime : public ModuleNode {
   std::vector<Node> nodes_;
   /*! \brief The argument nodes. */
   std::vector<uint32_t> input_nodes_;
+  /*! \brief The inputs nodes excluding params. */
+  std::vector<uint32_t> graph_input_nodes_;
   /*! \brief Used for quick entry indexing. */
   std::vector<uint32_t> node_row_ptr_;
   /*! \brief Output entries. */
