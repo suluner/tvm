@@ -36,6 +36,7 @@
 #include <functional>
 #include <utility>
 #include <vector>
+#include <string>
 
 namespace tvm {
 namespace runtime {
@@ -48,6 +49,8 @@ typedef DLDevice Device;
  */
 class NDArray : public ObjectRef {
  public:
+  /*! \brief name hint of NDArray */
+  std::string name_hint;
   /*! \brief ContainerBase used to back the TVMArrayHandle */
   class ContainerBase;
   /*! \brief NDArray internal container type */

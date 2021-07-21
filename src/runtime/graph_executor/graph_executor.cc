@@ -104,6 +104,20 @@ int GraphExecutor::GetInputIndex(const std::string& name) {
   }
   return -1;
 }
+
+/*!
+ * \brief Get the graph input index given the name of input.
+ * \param name The name of the input.
+ * \return The index of graph input.
+ */
+int GraphExecutor::GetGraphInputIndex(const std::string& name) {
+  auto it = graph_input_map_.find(name);
+  if (it != graph_input_map_.end()) {
+    return it->second;
+  }
+  return -1;
+}
+
 /*!
  * \brief set index-th input to the graph.
  * \param index The input index.
@@ -152,6 +166,30 @@ int GraphExecutor::NumOutputs() const { return outputs_.size(); }
  */
 int GraphExecutor::NumInputs() const { return input_nodes_.size(); }
 /*!
+ * \brief Get the number of graph inputs
+ *
+ * \return The number of graph inputs(exclude params) to the graph.
+*/
+int GraphExecutor::NumGraphInputs() const {return graph_input_nodes_.size(); }
+/*!
+ * \brief Return name_hint of NDArray for given input/output index.
+ * \param type 0 - input 1 - output.
+ * \param index index of input/output.
+ *
+ * \return string of name_hint
+ */
+std::string GraphExecutor::GetNameHint(int type, int index) const {
+  if (type == 0) {
+    CHECK_LT(static_cast<size_t>(index), input_nodes_.size());
+    uint32_t eid = this->entry_id(graph_input_nodes_[index], 0);
+    return data_entry_[eid].name_hint;
+  } else {
+    CHECK_LT(static_cast<size_t>(index), graph_input_nodes_.size());
+    uint32_t eid = this->entry_id(outputs_[index]);
+    return data_entry_[eid].name_hint;
+  }
+}
+/*!
  * \brief Return NDArray for given input index.
  * \param index The input index.
  *
@@ -160,6 +198,17 @@ int GraphExecutor::NumInputs() const { return input_nodes_.size(); }
 NDArray GraphExecutor::GetInput(int index) const {
   ICHECK_LT(static_cast<size_t>(index), input_nodes_.size());
   uint32_t eid = this->entry_id(input_nodes_[index], 0);
+  return data_entry_[eid];
+}
+/*!
+ * \brief Return NDArray for given graph input index.
+ * \param index The input index.
+ *
+ * \return NDArray corresponding to given graph input node index.
+ */
+NDArray GraphExecutor::GetGraphInput(int index) const {
+  CHECK_LT(static_cast<size_t>(index), graph_input_nodes_.size());
+  uint32_t eid = this->entry_id(graph_input_nodes_[index], 0);
   return data_entry_[eid];
 }
 /*!
@@ -203,11 +252,23 @@ void GraphExecutor::LoadParams(const std::string& param_blob) {
 
 void GraphExecutor::LoadParams(dmlc::Stream* strm) {
   Map<String, NDArray> params = ::tvm::runtime::LoadParams(strm);
+  // Copy inputs to graph_inputs to extract actual inputs (inputs - params).
+  copy(input_nodes_.begin(), input_nodes_.end(), back_inserter(graph_input_nodes_));
   for (auto& p : params) {
     int in_idx = GetInputIndex(p.first);
     if (in_idx < 0) continue;
     uint32_t eid = this->entry_id(input_nodes_[in_idx], 0);
     data_entry_[eid].CopyFrom(p.second);
+    // Remove params node from graph_input_nodes
+    graph_input_nodes_.erase(std::remove(graph_input_nodes_.begin(),
+                              graph_input_nodes_.end(),
+                              input_nodes_[in_idx]),
+                              graph_input_nodes_.end());
+  }
+  for (size_t i = 0; i < graph_input_nodes_.size(); i++) {
+    const uint32_t nid = graph_input_nodes_[i];
+    std::string& name = nodes_[nid].name;
+    graph_input_map_[name] = i;
   }
 }
 
@@ -352,6 +413,8 @@ void GraphExecutor::SetupStorage() {
 
     const DLTensor* tmp = data_entry_[i].operator->();
     data_alignment_[i] = details::GetDataAlignment(*tmp);
+    // Assign name hint to NDArray
+    data_entry_[i].name_hint = this->GetNodeName(i);
   }
 }
 
@@ -483,12 +546,32 @@ PackedFunc GraphExecutor::GetFunction(const std::string& name,
         *rv = this->GetInput(in_idx);
       }
     });
+  } else if (name == "get_graph_input") {
+    return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
+      int in_idx = 0;
+      if (String::CanConvertFrom(args[0])) {
+        in_idx = this->GetGraphInputIndex(args[0].operator String());
+      } else {
+        in_idx = args[0];
+      }
+      if (in_idx >= 0) {
+        *rv = this->GetGraphInput(in_idx);
+      }
+    });
   } else if (name == "get_num_outputs") {
     return PackedFunc(
         [sptr_to_self, this](TVMArgs args, TVMRetValue* rv) { *rv = this->NumOutputs(); });
   } else if (name == "get_num_inputs") {
     return PackedFunc(
         [sptr_to_self, this](TVMArgs args, TVMRetValue* rv) { *rv = this->NumInputs(); });
+  } else if (name == "get_num_graph_inputs") {
+    return PackedFunc(
+        [sptr_to_self, this](TVMArgs args, TVMRetValue* rv) { *rv = this->NumGraphInputs(); });
+  } else if (name == "get_name_hint") {
+    return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
+        // args[0] : 0/1 (input/output) and args[1] : index
+        *rv = this->GetNameHint(args[0], args[1]);
+    });
   } else if (name == "run") {
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) { this->Run(); });
   } else if (name == "load_params") {
